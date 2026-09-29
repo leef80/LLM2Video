@@ -1,0 +1,25 @@
+{
+  "title": "丹墀问对",
+  "subtitle": "承天殿前 · 申时",
+  "fps": 24,
+  "size": [1920, 1080],
+  "characters": {
+    "emperor": {"name": "皇帝", "voice": 49, "speed": 0.84},
+    "minister": {"name": "户部侍郎 林清远", "voice": 50, "speed": 0.9}
+  },
+  "shots": [
+    {"camera": "wide", "duration": 7.5, "title_card": true, "cue": "bell"},
+    {"camera": "low", "speaker": "emperor", "line": "阶下何人？所奏何事？"},
+    {"camera": "high", "speaker": "minister", "line": "臣，户部侍郎林清远，叩见陛下。", "action": "bow"},
+    {"camera": "minister_close", "speaker": "minister",
+     "line": "江南连月大雨，三州受灾，百姓流离失所。臣恳请陛下，开仓赈济！"},
+    {"camera": "emperor_close", "speaker": "emperor",
+     "line": "国库本就吃紧，北境军饷尚且未足。你要朕，如何两全？"},
+    {"camera": "high", "speaker": "minister",
+     "line": "陛下！民惟邦本，本固邦宁。军饷可缓一月，灾民却等不得一日啊！", "action": "bow"},
+    {"camera": "low", "speaker": "emperor", "pre": 1.4, "cue": "drum", "action": "gesture",
+     "line": "……准奏。命你即刻南下，督办赈灾。若有差池，唯你是问。"},
+    {"camera": "wide_end", "speaker": "minister", "line": "臣，领旨谢恩！", "action": "kowtow", "pre": 1.3,
+     "tail": 4.5}
+  ]
+}

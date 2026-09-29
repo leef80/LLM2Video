@@ -1,0 +1,4 @@
+numpy
+pillow
+sherpa-onnx
+imageio-ffmpeg

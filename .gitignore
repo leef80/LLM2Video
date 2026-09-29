@@ -1,0 +1,7 @@
+# downloaded fonts and TTS model (fetched automatically by make_video.py)
+assets/
+# intermediate render files
+build/
+build_log.txt
+__pycache__/
+*.pyc
