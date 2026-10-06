@@ -110,6 +110,17 @@ cd .. && python -m llm2video.board docs/palette.png   # 重新画色卡台
 python make_video.py screenplays/danchi_wendui.json  # 重新出片
 ```
 
+### 二十版色卡台
+
+- [调研：国际规范、流行色、2026 产品配色](docs/color_research.md)
+- 20 套情绪预设：`grade/presets.mjs`；生成好的色卡：`grade/palettes/01.json` … `20.json`
+- [总览](docs/versions/overview.jpg) · 详细对比 [1–5](docs/versions/sheet_1.jpg) · [6–10](docs/versions/sheet_2.jpg) · [11–15](docs/versions/sheet_3.jpg) · [16–20](docs/versions/sheet_4.jpg)
+
+```bash
+node grade/make_palette.mjs grade/palettes/07.json --preset=07          # 生成某一版
+LLM2VIDEO_PALETTE=grade/palettes/07.json python make_video.py screenplays/danchi_wendui.json   # 用这一版出片
+```
+
 ## 后期 LUT 调色（Chroma.js）
 
 `grade/make_lut.mjs` 用 [Chroma.js](https://gka.github.io/chroma.js/) 在 OKLab/OKLCH 感知色彩空间里计算调色，导出 3D LUT（`.cube`）。具体做法：

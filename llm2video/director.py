@@ -127,7 +127,7 @@ def build_audio(shots, total, fps, n_frames):
             cues.append((at, sh.spec["cue"]))
     dry = voice["emperor"] + voice["minister"]
     env_all = np.abs(dry)
-    duck = np.convolve(env_all > 0.02, np.ones(int(0.25 * audio.SR)) / int(0.25 * audio.SR), mode="same")
+    duck = audio.boxcar(env_all > 0.02, int(0.25 * audio.SR))
     duck = np.clip(duck * 3, 0, 1)
     music = audio.score(n / audio.SR, cues, duck)
     wet = audio.convolve(dry, audio.reverb_ir())
@@ -386,6 +386,9 @@ class Director:
             ff = subprocess.Popen(
                 [ffmpeg_exe(), "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
                  "-s", f"{self.size[0]}x{self.size[1]}", "-r", str(self.fps), "-i", "-", "-i", str(wav),
+                 # ITU-R BT.709: convert with the 709 matrix into TV (limited) range and tag the stream
+                 "-vf", "scale=out_color_matrix=bt709:out_range=tv",
+                 "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
                  "-c:v", "libx264", "-preset", "slow", "-tune", "animation", "-crf", "20", "-pix_fmt", "yuv420p",
                  "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(out_path)],
                 stdin=subprocess.PIPE)

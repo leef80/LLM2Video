@@ -6,7 +6,7 @@
 // Semantic roles (robe, skin, roof tile ...) point at ramp steps; required contrast pairs are
 // checked and a failing role is walked along its ramp until it passes.
 //
-// Usage: node make_palette.mjs [out.json] [--space=oklab|lab|oklch|lch]
+// Usage: node make_palette.mjs [out.json] [--space=oklab|lab|oklch|lch] [--maxhue=20] [--preset=07]
 //        (default: ../llm2video/palette.json, oklab)
 import chroma from "chroma-js";
 import { writeFileSync } from "node:fs";
@@ -107,6 +107,24 @@ const CHECKS = [
   ["pave.path", "pave", 1.2, "御道 / 铺地"],
 ];
 
+// ----------------------------------------------------------------------------- presets
+
+const presetArg = process.argv.find((a) => a.startsWith("--preset="));
+let PRESET = null;
+let SAT = 1;
+if (presetArg) {
+  const { PRESETS } = await import("./presets.mjs");
+  const id = presetArg.split("=")[1];
+  PRESET = PRESETS.find((p) => p.id === id);
+  if (!PRESET) throw new Error(`unknown preset ${id}`);
+  Object.assign(MOOD, {
+    name: PRESET.name, note: PRESET.note, light: PRESET.light, shadow: PRESET.shadow,
+    lightPull: PRESET.lightPull, shadowPull: PRESET.shadowPull, maxHueShift: PRESET.maxHue,
+  });
+  for (const [f, hex] of Object.entries(PRESET.families || {})) FAMILIES[f].base = hex;
+  SAT = PRESET.sat;
+}
+
 // ----------------------------------------------------------------------------- ramps
 
 const lightHue = chroma(MOOD.light);
@@ -115,7 +133,7 @@ const shadowHue = chroma(MOOD.shadow);
 // how the mood is applied:
 //   oklab / lab   : blend toward the light/shadow colour in that Lab space (pulls chroma down)
 //   oklch / lch   : rotate hue toward the light/shadow hue in polar space, chroma kept by the taper
-const SPACE = (process.argv.find((a) => a.startsWith("--space=")) || "--space=oklab").split("=")[1];
+const SPACE = (process.argv.find((a) => a.startsWith("--space=")) || `--space=${PRESET?.space || "oklab"}`).split("=")[1];
 const CIE = SPACE === "lab" || SPACE === "lch";
 const POLAR = SPACE === "lch" || SPACE === "oklch";
 const LAB = CIE ? "lab" : "oklab";     // rectangular space used for blends at runtime
@@ -164,7 +182,11 @@ function rampColor(base, pos) {
 
 const families = {};
 for (const [name, f] of Object.entries(FAMILIES)) {
-  const base = chroma(f.base);
+  let base = chroma(f.base);
+  if (SAT !== 1 && name !== "ink" && name !== "iron") {
+    const [l, c, h] = base.oklch();
+    base = chroma.oklch(l, c * SAT, Number.isNaN(h) ? 0 : h);
+  }
   const fine = [];
   for (let i = 0; i < FINE; i++) fine.push(rampColor(base, i / (FINE - 1)));
   const steps = [];
@@ -225,7 +247,12 @@ const special = {
 // ----------------------------------------------------------------------------- write
 
 const hex = (c) => c.hex();
+const rampDE = Object.fromEntries(Object.entries(families).map(([n, f]) => [n,
+  +Math.min(...f.steps.slice(1).map((c, i) => chroma.deltaE(c, f.steps[i]))).toFixed(1)]));
+const minStepDE = 5; // neighbouring steps must be clearly distinct (ΔE00 ≥ 5)
+
 const out = {
+  preset: PRESET && { id: PRESET.id, group: PRESET.group, name: PRESET.name, source: PRESET.source },
   mood: MOOD,
   space: SPACE,
   mix: LAB,
@@ -238,6 +265,7 @@ const out = {
   sky: skyStops,
   special,
   audit,
+  rampDE,
 };
 const dst = process.argv.slice(2).find((a) => !a.startsWith("--")) || new URL("../llm2video/palette.json", import.meta.url).pathname;
 writeFileSync(dst, JSON.stringify(out, null, 1) + "\n");
@@ -245,8 +273,10 @@ writeFileSync(dst, JSON.stringify(out, null, 1) + "\n");
 console.log(`${MOOD.name} [${SPACE}${POLAR && MOOD.maxHueShift < 360 ? " ≤" + MOOD.maxHueShift + "°" : ""}]  ->  ${dst}`);
 for (const [n, f] of Object.entries(families)) console.log(n.padEnd(10), f.steps.map(hex).join(" "));
 console.log("\ncontrast audit");
+console.log("\nCIEDE2000 between neighbouring steps (min per family, need ≥ " + minStepDE + ")");
+console.log(Object.entries(rampDE).map(([n, d]) => `${n} ${d}${d < minStepDE ? "✗" : ""}`).join("  "));
 for (const a of audit) {
   console.log(`${a.pass ? "ok  " : "FAIL"} ${a.why.padEnd(10)} ${String(a.ratio).padStart(5)} ≥ ${a.min}  APCA ${a.apca}` +
               (a.moved ? `   auto: ${a.moved}` : ""));
 }
-if (audit.some((a) => !a.pass)) process.exitCode = 1;
+if (audit.some((a) => !a.pass) || Object.values(rampDE).some((d) => d < minStepDE)) process.exitCode = 1;

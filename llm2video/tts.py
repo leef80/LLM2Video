@@ -1,4 +1,5 @@
 """Offline Mandarin speech with sherpa-onnx + Kokoro (no network needed once downloaded)."""
+import hashlib
 import re
 from functools import lru_cache
 
@@ -54,7 +55,19 @@ def engine():
 
 
 def synth(text, voice, speed=1.0):
-    """Return (float32 samples, sample_rate) with leading/trailing silence trimmed."""
+    """Return (float32 samples, sample_rate) with leading/trailing silence trimmed (cached on disk)."""
+    key = hashlib.sha1(f"{assets.TTS_MODEL[0]}|{voice}|{speed}|{speakable(text)}".encode()).hexdigest()[:16]
+    cache = assets.ROOT / "cache" / "tts" / f"{key}.npz"
+    if cache.exists():
+        z = np.load(cache)
+        return z["x"], int(z["sr"])
+    x, sr = _synth(text, voice, speed)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(cache, x=x, sr=sr)
+    return x, sr
+
+
+def _synth(text, voice, speed):
     tts = engine()
     a = tts.generate(speakable(text), sid=int(voice), speed=float(speed))
     x = np.asarray(a.samples, dtype=np.float32)

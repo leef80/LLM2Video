@@ -61,11 +61,21 @@ def drum(dur=1.6, seed=1):
     return (y / np.abs(y).max()).astype(np.float32)
 
 
+def boxcar(x, n):
+    """Centred moving average, same length as x (cumulative sum: O(len) instead of O(len*n))."""
+    x = np.asarray(x, dtype=np.float64)
+    c = np.concatenate([[0.0], np.cumsum(x)])
+    half = n // 2
+    i = np.arange(len(x))
+    lo, hi = np.clip(i - half, 0, len(x)), np.clip(i - half + n, 0, len(x))
+    return ((c[hi] - c[lo]) / n).astype(np.float32)
+
+
 def wind(dur, seed=2):
     rng = np.random.default_rng(seed)
     n = int(dur * SR)
     w = np.cumsum(rng.standard_normal(n))
-    w -= np.convolve(w, np.ones(4801) / 4801, mode="same")  # remove drift
+    w -= boxcar(w, 4801)  # remove drift
     w /= np.abs(w).max() + 1e-9
     t = np.arange(n) / SR
     gust = 0.55 + 0.45 * np.sin(2 * np.pi * 0.07 * t + 1.0) * np.sin(2 * np.pi * 0.023 * t)

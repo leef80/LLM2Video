@@ -85,6 +85,75 @@ def stills(dst, rows, labels, frames):
     img.save(dst, quality=88)
 
 
+def _wrap(d, text, font, width):
+    lines, cur = [], ""
+    for ch in text:
+        if d.textlength(cur + ch, font=font) > width:
+            lines.append(cur)
+            cur = ch
+        else:
+            cur += ch
+    return lines + ([cur] if cur else [])
+
+
+CARD_ROLES = ["minister.robe", "emperor.robe", "hall.red", "roof.tile", "lintel.blue", "lintel.green", "skin",
+              "steps", "pave"]
+
+
+def _role_hex(p, role):
+    fam, step = p["roles"][role].split(".", 1)
+    fine = p["families"][fam]["fine"]
+    return fine[round(float(step) * (len(fine) - 1) / 10)]
+
+
+def versions(dst_prefix, palettes, still_dirs, frames, per_sheet=5):
+    """One card per palette version: name, source, mood + role swatches, then the stills."""
+    w, h = 560, 254
+    card_h = 70 + h + 20
+    sheets = []
+    for s0 in range(0, len(palettes), per_sheet):
+        chunk = list(zip(palettes[s0:s0 + per_sheet], still_dirs[s0:s0 + per_sheet]))
+        img = Image.new("RGB", (330 + len(frames) * (w + 6), 20 + len(chunk) * card_h), BG)
+        d = ImageDraw.Draw(img)
+        for r, (p, sd) in enumerate(chunk):
+            y = 20 + r * card_h
+            pr = p["preset"]
+            d.text((24, y), f"{pr['id']}  {pr['name']}", font=_font(36), fill=FG)
+            lines = _wrap(d, f"{pr['group']} · {pr['source']}", _font(17), 290)[:2]
+            lines += _wrap(d, p["mood"]["note"], _font(17), 290)[:1]
+            for k, ln in enumerate(lines):
+                d.text((24, y + 46 + k * 20), ln, font=_font(17), fill=DIM)
+            # mood light / shadow
+            for k, key in enumerate(("light", "shadow")):
+                d.rounded_rectangle([24 + k * 70, y + 112, 84 + k * 70, y + 154], 8, fill=_hex(p["mood"][key]))
+            d.text((24, y + 158), "主光  阴影", font=_font(16), fill=DIM)
+            for i, role in enumerate(CARD_ROLES):
+                x = 24 + (i % 5) * 58
+                yy = y + 190 + (i // 5) * 58
+                d.rectangle([x, yy, x + 50, yy + 50], fill=_hex(_role_hex(p, role)))
+            for c, f in enumerate(frames):
+                im = Image.open(f"{sd}/preview_{f:05d}.png").resize((w, 315)).crop((0, 31, w, 31 + h))
+                img.paste(im, (330 + c * (w + 6), y + 50))
+        path = f"{dst_prefix}_{s0 // per_sheet + 1}.jpg"
+        img.save(path, quality=86)
+        sheets.append(path)
+    return sheets
+
+
+def overview(dst, palettes, still_dirs, frame, cols=4):
+    w, h = 470, 213
+    rows = (len(palettes) + cols - 1) // cols
+    img = Image.new("RGB", (cols * (w + 8) + 8, 70 + rows * (h + 44)), BG)
+    d = ImageDraw.Draw(img)
+    d.text((14, 16), "二十版色卡台 · 总览", font=_font(32), fill=FG)
+    for i, (p, sd) in enumerate(zip(palettes, still_dirs)):
+        x, y = 8 + (i % cols) * (w + 8), 70 + (i // cols) * (h + 44)
+        im = Image.open(f"{sd}/preview_{frame:05d}.png").resize((w, 264)).crop((0, 26, w, 26 + h))
+        img.paste(im, (x, y))
+        d.text((x, y + h + 6), f"{p['preset']['id']} {p['preset']['name']}", font=_font(22), fill=FG)
+    img.save(dst, quality=86)
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "mixes":
