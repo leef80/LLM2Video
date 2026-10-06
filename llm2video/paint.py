@@ -3,21 +3,6 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 
-def hexc(s, a=255):
-    s = s.lstrip("#")
-    return (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16), a)
-
-
-def mix(c1, c2, t):
-    return tuple(int(round(a + (b - a) * t)) for a, b in zip(c1, c2))
-
-
-def shade(c, k):
-    """Multiply rgb by k (k>1 brightens), keep alpha."""
-    out = [max(0, min(255, int(v * k))) for v in c[:3]]
-    return tuple(out) + tuple(c[3:])
-
-
 def catmull(pts, closed=True, n=8):
     """Catmull-Rom spline through control points -> dense polyline."""
     p = [np.asarray(q, dtype=float) for q in pts]

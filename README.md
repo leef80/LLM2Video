@@ -86,7 +86,31 @@ python make_video.py screenplays/danchi_wendui.json --preview 100,330,660
 
 台词和配音可以沿用本仓库的剧本和 TTS 输出（`build/audio.wav`），再用平台的对口型功能或剪映合成。
 
-## 调色（Chroma.js）
+## 情绪色卡台（Chroma.js 配色）
+
+画面里的每一个颜色都从同一张色卡台里取：`grade/make_palette.mjs` 用 [Chroma.js](https://gka.github.io/chroma.js/) 生成，结果写进 `llm2video/palette.json`，渲染器只认这里的颜色。
+
+![情绪色卡台](docs/palette.png)
+
+![配色前后对比](docs/palette_before_after.jpg)
+
+- **一个情绪定调。** 「暮金宫阙」：暖金主光、紫墨阴影。
+- **统一的明度阶梯。** 12 个色族（朱、金、青绿、群青、青石、汉白玉、金砖、肤……）都拉成 11 级色阶，第 k 级在所有色族里感知明度相同（OKLCH L 0.96 → 0.20），不同颜色并排时明暗节奏一致。
+- **色相随明度漂移。** 越暗越偏向阴影紫墨，越亮越偏向主光暖金，所有颜色像被同一束光照着，这是整体色调不分裂的关键。超出 sRGB 色域的颜色只收饱和度、不改明度。
+- **角色而不是色值。** 代码里写的是 `pal("minister.robe")`、`pal("roof.tile")` 这样的语义角色，角色再指向某个色族的某一级。
+- **顺着色阶打光。** 受光、背光、远处的薄雾都是沿着该颜色自己的 101 级细分色阶滑动（OKLab 里计算），不再按 RGB 乘系数，所以阴影不会变脏、变灰。
+- **对比度自动过检。** 必须分得清的组合（字幕/黑边、眉眼/皮肤、补子仙鹤、匾额字、人物/背景……）用 WCAG 对比度检查，同时给出 APCA 值。不达标时，自动把前景角色沿色阶往更亮或更暗挪，直到通过，并在报告里写明挪了几级。
+- **天空也来自色卡。** 天空按仰角，从地平线的暖金经米白过渡到群青。
+
+改配色只需改 `MOOD`、`FAMILIES` 或 `ROLES`，然后：
+
+```bash
+cd grade && npm install && node make_palette.mjs   # 生成 palette.json，打印色阶和对比度自检
+cd .. && python -m llm2video.board docs/palette.png   # 重新画色卡台
+python make_video.py screenplays/danchi_wendui.json  # 重新出片
+```
+
+## 后期 LUT 调色（Chroma.js）
 
 `grade/make_lut.mjs` 用 [Chroma.js](https://gka.github.io/chroma.js/) 在 OKLab/OKLCH 感知色彩空间里计算调色，导出 3D LUT（`.cube`）。具体做法：
 - 对明度做 S 曲线；

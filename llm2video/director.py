@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from . import assets, audio, tts
 from .figures import Pose, sprite
 from .paint import soft_blob
+from .palette import pal, rgb
 from .palace import EMPEROR_POS, H, L, MINISTER_POS, paste_rgba, render_static
 
 ANCHOR_H = 1.35      # height (m) at which character billboards are pinned to the 3D scene
@@ -175,7 +176,7 @@ class ShotRender:
         for i, (_, _, rx, ry, _) in enumerate(self.clouds):
             base = Image.new("RGBA", (int(rx * 2.6), int(ry * 4)), (0, 0, 0, 0))
             for k in range(5):
-                b = soft_blob(rx * rng.uniform(0.35, 0.6), ry * rng.uniform(0.6, 1.0), (255, 246, 232, 150),
+                b = soft_blob(rx * rng.uniform(0.35, 0.6), ry * rng.uniform(0.6, 1.0), pal("cloud", 150),
                               ry * 0.5)
                 base.alpha_composite(b, (int(rng.uniform(0, base.width - b.width)) if base.width > b.width else 0,
                                          int(rng.uniform(0, max(1, base.height - b.height)))))
@@ -193,7 +194,7 @@ class ShotRender:
 
 @lru_cache(maxsize=64)
 def _puff(radius, alpha):
-    return soft_blob(radius, radius, (236, 232, 226, alpha), radius * 0.6)
+    return soft_blob(radius, radius, pal("smoke", alpha), radius * 0.6)
 
 
 @lru_cache(maxsize=512)
@@ -210,8 +211,8 @@ def _leaf_sprite(size, angle, squash):
     for k in range(9):
         a = math.radians(200 + k * 17.5)
         fan.append((s + math.cos(a) * s * 0.9, s + math.sin(a) * s * 0.9 * 0.85))
-    d.polygon(fan, fill=(236, 186, 52, 235))
-    d.line([(s, s * 1.5), (s, s * 1.9)], fill=(170, 120, 30, 235), width=max(1, s // 10))
+    d.polygon(fan, fill=pal("leaf", 235))
+    d.line([(s, s * 1.5), (s, s * 1.9)], fill=pal("leaf.vein", 235), width=max(1, s // 10))
     im = im.resize((max(1, int(im.width * max(0.15, abs(squash)))), im.height), Image.BICUBIC)
     return im.rotate(angle, resample=Image.BICUBIC, expand=True).resize(
         (max(1, im.width // 3 + 1), max(1, im.height // 3 + 1)), Image.LANCZOS)
@@ -240,14 +241,13 @@ class Post:
             d.polygon([(ox, oy), p1, p2], fill=int(rng.uniform(40, 90)))
         rays = rays.filter(ImageFilter.GaussianBlur(28))
         fall = np.clip(1.2 - np.sqrt((xx / w) ** 2 + (yy / h) ** 2), 0, 1)
-        self.rays = (np.asarray(rays, np.float32) / 255 * fall)[..., None] * np.array([255, 222, 170], np.float32)
+        self.rays = (np.asarray(rays, np.float32) / 255 * fall)[..., None] * np.array(rgb("rays"), np.float32)
         self.grain = [np.random.default_rng(i).normal(0, 1.4, (h, w, 1)).astype(np.float32) for i in range(6)]
         self.bar = int(round((h - w / LETTERBOX) / 2))
 
     def apply(self, img, frame, ray_amt=0.12, fade=1.0):
         a = np.asarray(img, np.float32)[..., :3]
         a = a + self.rays * ray_amt * (1 - a / 255)          # screen-ish blend
-        a = a * np.array([1.03, 1.0, 0.94], np.float32)       # warm grade
         a = 255 * (a / 255) ** 1.04
         a = (a - 128) * 1.06 + 128
         a *= self.vig
@@ -303,7 +303,7 @@ class Director:
                 bx = sr.cw * (1.05 - 0.09 * tl) + b * 38 * MARGIN + 20 * math.sin(b * 1.7)
                 by = sr.ch * 0.16 + b * 11 * MARGIN * (1 if b % 2 else -0.6) + 6 * math.sin(tl * 1.3 + b)
                 flap = math.sin(tl * 9 + b * 1.1) * 7 * MARGIN
-                d.line([(bx - 10 * MARGIN, by - flap), (bx, by), (bx + 10 * MARGIN, by - flap)], fill=(40, 34, 30),
+                d.line([(bx - 10 * MARGIN, by - flap), (bx, by), (bx + 10 * MARGIN, by - flap)], fill=rgb("bird"),
                        width=max(2, int(2.2 * MARGIN)))
         canvas.alpha_composite(sr.world)
         # incense smoke from the bronze tripods
@@ -421,7 +421,7 @@ class Director:
 
 @lru_cache(maxsize=32)
 def _shadow(rx, ry):
-    return soft_blob(rx, ry, (25, 18, 12, 90), max(2, ry * 0.6))
+    return soft_blob(rx, ry, pal("shadow", 90), max(2, ry * 0.6))
 
 
 @lru_cache(maxsize=512)
@@ -449,18 +449,18 @@ class Overlays:
         title = self.play.get("title", "")
         cx, cy = w / 2, h * 0.36
         glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        ImageDraw.Draw(glow).text((cx, cy), title, font=self.title_font, fill=(40, 20, 10, 200), anchor="mm")
+        ImageDraw.Draw(glow).text((cx, cy), title, font=self.title_font, fill=pal("title.glow", 200), anchor="mm")
         im.alpha_composite(glow.filter(ImageFilter.GaussianBlur(10)))
-        d.text((cx, cy), title, font=self.title_font, fill=(252, 240, 214, 255), anchor="mm")
+        d.text((cx, cy), title, font=self.title_font, fill=pal("title"), anchor="mm")
         bbox = d.textbbox((cx, cy), title, font=self.title_font, anchor="mm")
         # red seal
         sx, sy = bbox[2] + 26, bbox[1] + 10
-        d.rectangle([sx, sy, sx + 64, sy + 88], fill=(178, 34, 28, 235))
-        d.text((sx + 32, sy + 24), "问", font=self.seal_font, fill=(250, 236, 220, 255), anchor="mm")
-        d.text((sx + 32, sy + 64), "对", font=self.seal_font, fill=(250, 236, 220, 255), anchor="mm")
+        d.rectangle([sx, sy, sx + 64, sy + 88], fill=pal("seal", 235))
+        d.text((sx + 32, sy + 24), "问", font=self.seal_font, fill=pal("seal.text"), anchor="mm")
+        d.text((sx + 32, sy + 64), "对", font=self.seal_font, fill=pal("seal.text"), anchor="mm")
         sub = self.play.get("subtitle", "")
         if sub:
-            d.text((cx, bbox[3] + 50), sub, font=self.small_font, fill=(250, 236, 214, 235), anchor="mm")
+            d.text((cx, bbox[3] + 50), sub, font=self.small_font, fill=pal("title", 235), anchor="mm")
         return im
 
     def draw(self, img, t, subs, title_dur):
@@ -474,9 +474,8 @@ class Overlays:
         for s in subs:
             if s.start <= t < s.end:
                 a = min(1.0, (t - s.start) / 0.15, (s.end - t) / 0.15)
-                c = int(248 * a)
                 y = self.size[1] - self.bar / 2
-                d.text((self.size[0] / 2, y), s.text, font=self.sub_font, fill=(c, int(c * 0.95), int(c * 0.86)),
+                d.text((self.size[0] / 2, y), s.text, font=self.sub_font, fill=tuple(int(v * a) for v in rgb("subtitle")),
                        anchor="mm", stroke_width=2, stroke_fill=(0, 0, 0))
 
 

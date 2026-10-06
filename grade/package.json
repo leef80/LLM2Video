@@ -2,6 +2,6 @@
   "name": "llm2video-grade",
   "private": true,
   "type": "module",
-  "scripts": { "luts": "node make_lut.mjs luts" },
+  "scripts": { "luts": "node make_lut.mjs luts", "palette": "node make_palette.mjs" },
   "dependencies": { "chroma-js": "^3.2.0" }
 }

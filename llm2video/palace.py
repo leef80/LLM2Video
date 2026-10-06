@@ -8,7 +8,8 @@ from PIL import Image, ImageDraw, ImageFont
 from . import assets
 from .cam3d import NEAR, Camera, homography
 from .figures import Pose, sprite
-from .paint import catmull, hexc, mix, noise_texture, shade, soft_blob
+from .paint import catmull, noise_texture, soft_blob
+from .palette import mix, pal, rgb, shade, sky_stops
 
 # ----------------------------------------------------------------------------- layout
 N_STEPS = 22
@@ -30,12 +31,12 @@ EMPEROR_POS = (0.0, H, L + 0.6)
 
 SUN = np.array([-0.45, 0.75, -0.5])
 SUN = SUN / np.linalg.norm(SUN)
-HAZE = (233, 220, 192)
+HAZE = rgb("haze")
 
-STONE = hexc("#93a0a6")        # bluestone steps
-MARBLE = hexc("#e6e1d6")       # white marble balustrades
-PAVE = hexc("#a9a291")
-PAVE_PATH = hexc("#c3bca9")
+STONE = pal("steps")        # bluestone steps
+MARBLE = pal("marble")       # white marble balustrades
+PAVE = pal("pave")
+PAVE_PATH = pal("pave.path")
 
 
 def light(normal):
@@ -104,15 +105,15 @@ def _roof(tp, x0, x1, y0, top_x0, top_x1, y1, lift, tile_c, dark_c):
     tp.img.paste(lay, (0, 0), Image.fromarray(np.minimum(np.asarray(mask), np.asarray(lay)[..., 3])))
     # eave edge: dark underside + tile ends
     under = [(p[0], p[1] - 0.28) for p in bottom]
-    tp.poly(bottom + list(reversed(under)), hexc("#3a2a1f"))
+    tp.poly(bottom + list(reversed(under)), pal("ornament.dark"))
     for p in bottom[::2]:
         tp.ellipse(p[0], p[1] - 0.05, 0.13, 0.13, shade(tile_c, 0.85), outline=shade(tile_c, 0.6), w=0.03)
     return bottom
 
 
 def _brackets(tp, x0, x1, y0, h, unit=0.7):
-    tp.rect(x0, y0, x1, y0 + h, hexc("#2f2620"))
-    blue, green, gold = hexc("#2b5d86"), hexc("#2f7d62"), hexc("#d0a449")
+    tp.rect(x0, y0, x1, y0 + h, pal("bracket.gap"))
+    blue, green, gold = pal("lintel.blue"), pal("lintel.green"), pal("paint.gold")
     x = x0 + unit / 2
     while x < x1 - unit / 3:
         rows = [(0.18, green), (0.36, blue), (0.26, green), (0.46, blue), (0.3, green)]
@@ -130,19 +131,19 @@ def _hall(tp, cx, base_y, width, bays, name=None, font_path=None, levels=2, scal
     """Draw a double-eave hall centred at cx with its base at base_y (metres)."""
     s = scale
     half = width / 2
-    red, red_d = hexc("#a8261d"), hexc("#7e1a14")
-    gold = hexc("#d0a449")
-    tile, tile_d = hexc("#e7ab27"), hexc("#b27612")
+    red, red_d = pal("hall.red"), pal("hall.red.dark")
+    gold = pal("paint.gold")
+    tile, tile_d = pal("roof.tile"), pal("roof.tile.dark")
     # base
-    tp.rect(cx - half + 1 * s, base_y, cx + half - 1 * s, base_y + 1.2 * s, hexc("#e4dfd3"))
-    tp.rect(cx - half + 1 * s, base_y + 1.05 * s, cx + half - 1 * s, base_y + 1.2 * s, hexc("#f2eee6"))
-    tp.rect(cx - half + 1 * s, base_y, cx + half - 1 * s, base_y + 0.12 * s, hexc("#b9b3a7"))
+    tp.rect(cx - half + 1 * s, base_y, cx + half - 1 * s, base_y + 1.2 * s, pal("hall.base"))
+    tp.rect(cx - half + 1 * s, base_y + 1.05 * s, cx + half - 1 * s, base_y + 1.2 * s, pal("hall.base.light"))
+    tp.rect(cx - half + 1 * s, base_y, cx + half - 1 * s, base_y + 0.12 * s, pal("hall.base.dark"))
     y_col0, y_col1 = base_y + 1.2 * s, base_y + 7.6 * s
     span = width - 7.1 * s
     bay = span / bays
     xs = [cx - span / 2 + i * bay for i in range(bays + 1)]
     # doors and windows
-    tp.rect(xs[0], y_col0, xs[-1], y_col1, hexc("#5e1611"))
+    tp.rect(xs[0], y_col0, xs[-1], y_col1, pal("hall.void"))
     for i in range(bays):
         a, b = xs[i], xs[i + 1]
         leaves = 4
@@ -151,22 +152,22 @@ def _hall(tp, cx, base_y, width, bays, name=None, font_path=None, levels=2, scal
             la, lb = a + k * lw + 0.06 * s, a + (k + 1) * lw - 0.06 * s
             end_bay = i in (0, bays - 1)
             top_lattice = y_col0 + (3.2 if end_bay else 2.4) * s
-            tp.rect(la, y_col0, lb, y_col1 - 0.5 * s, hexc("#8f2017"))
-            tp.rect(la + 0.08 * s, top_lattice, lb - 0.08 * s, y_col1 - 0.75 * s, hexc("#6a3a1c"))
+            tp.rect(la, y_col0, lb, y_col1 - 0.5 * s, pal("hall.door"))
+            tp.rect(la + 0.08 * s, top_lattice, lb - 0.08 * s, y_col1 - 0.75 * s, pal("hall.lattice.ground"))
             # lattice
             yy = top_lattice
             step = 0.28 * s
             while yy < y_col1 - 0.75 * s:
-                tp.line([(la + 0.08 * s, yy), (lb - 0.08 * s, yy)], hexc("#c9953f"), 0.03 * s)
+                tp.line([(la + 0.08 * s, yy), (lb - 0.08 * s, yy)], pal("hall.lattice"), 0.03 * s)
                 yy += step
             xx = la + 0.08 * s
             while xx < lb - 0.08 * s:
-                tp.line([(xx, top_lattice), (xx, y_col1 - 0.75 * s)], hexc("#c9953f"), 0.03 * s)
+                tp.line([(xx, top_lattice), (xx, y_col1 - 0.75 * s)], pal("hall.lattice"), 0.03 * s)
                 xx += step
             if end_bay:
                 tp.rect(la, y_col0, lb, top_lattice - 0.3 * s, red)
             else:
-                tp.rect(la + 0.12 * s, y_col0 + 0.3 * s, lb - 0.12 * s, top_lattice - 0.5 * s, hexc("#9c241a"))
+                tp.rect(la + 0.12 * s, y_col0 + 0.3 * s, lb - 0.12 * s, top_lattice - 0.5 * s, pal("hall.door.panel"))
                 tp.line([(la + 0.12 * s, top_lattice - 0.5 * s), (lb - 0.12 * s, top_lattice - 0.5 * s)], gold,
                         0.05 * s)
             tp.line([(la, top_lattice - 0.15 * s), (lb, top_lattice - 0.15 * s)], gold, 0.06 * s)
@@ -176,24 +177,24 @@ def _hall(tp, cx, base_y, width, bays, name=None, font_path=None, levels=2, scal
     for k in range(10):
         ya = y_col1 - (k + 1) * 0.35 * s
         sp.poly([(xs[0], ya), (xs[-1], ya), (xs[-1], ya + 0.35 * s), (xs[0], ya + 0.35 * s)],
-                (20, 8, 5, int(120 * (1 - k / 10))))
+                pal("shadow", int(120 * (1 - k / 10))))
     tp.img.alpha_composite(sh)
     # columns
     for x in xs:
         tp.rect(x - 0.38 * s, y_col0, x + 0.38 * s, y_col1, red)
-        tp.rect(x - 0.3 * s, y_col0, x - 0.18 * s, y_col1, hexc("#c23a2c"))
+        tp.rect(x - 0.3 * s, y_col0, x - 0.18 * s, y_col1, pal("hall.red.light"))
         tp.rect(x + 0.16 * s, y_col0, x + 0.38 * s, y_col1, red_d)
-        tp.rect(x - 0.48 * s, y_col0, x + 0.48 * s, y_col0 + 0.25 * s, hexc("#d8d2c5"))
+        tp.rect(x - 0.48 * s, y_col0, x + 0.48 * s, y_col0 + 0.25 * s, pal("gate.coping"))
     # lintel
     y_l0, y_l1 = y_col1, y_col1 + 0.95 * s
-    tp.rect(xs[0] - 0.6 * s, y_l0, xs[-1] + 0.6 * s, y_l1, hexc("#26507a"))
+    tp.rect(xs[0] - 0.6 * s, y_l0, xs[-1] + 0.6 * s, y_l1, pal("lintel.blue"))
     for i in range(bays):
         a, b = xs[i], xs[i + 1]
         m = (a + b) / 2
         w = (b - a) * 0.28
         tp.poly([(m - w, (y_l0 + y_l1) / 2), (m - w * 0.7, y_l1 - 0.1 * s), (m + w * 0.7, y_l1 - 0.1 * s),
                  (m + w, (y_l0 + y_l1) / 2), (m + w * 0.7, y_l0 + 0.1 * s), (m - w * 0.7, y_l0 + 0.1 * s)],
-                hexc("#2f7d62"))
+                pal("lintel.green"))
         tp.line([(m - w, (y_l0 + y_l1) / 2), (m - w * 0.7, y_l1 - 0.1 * s), (m + w * 0.7, y_l1 - 0.1 * s),
                  (m + w, (y_l0 + y_l1) / 2), (m + w * 0.7, y_l0 + 0.1 * s), (m - w * 0.7, y_l0 + 0.1 * s),
                  (m - w, (y_l0 + y_l1) / 2)], gold, 0.06 * s)
@@ -204,11 +205,11 @@ def _hall(tp, cx, base_y, width, bays, name=None, font_path=None, levels=2, scal
     _brackets(tp, xs[0] - 1.2 * s, xs[-1] + 1.2 * s, y_l1, 1.15 * s, unit=0.72 * s)
     y_b = y_l1 + 1.15 * s
     # rafter ends
-    tp.rect(xs[0] - 2 * s, y_b, xs[-1] + 2 * s, y_b + 0.35 * s, hexc("#241a14"))
+    tp.rect(xs[0] - 2 * s, y_b, xs[-1] + 2 * s, y_b + 0.35 * s, pal("eave.under"))
     x = xs[0] - 1.9 * s
     k = 0
     while x < xs[-1] + 1.9 * s:
-        tp.rect(x, y_b + 0.08 * s, x + 0.16 * s, y_b + 0.26 * s, hexc("#2b5d86") if k % 2 else hexc("#2f7d62"))
+        tp.rect(x, y_b + 0.08 * s, x + 0.16 * s, y_b + 0.26 * s, pal("lintel.blue") if k % 2 else pal("lintel.green"))
         x += 0.3 * s
         k += 1
     y_r0 = y_b + 0.35 * s
@@ -218,10 +219,10 @@ def _hall(tp, cx, base_y, width, bays, name=None, font_path=None, levels=2, scal
               0.75 * s, tile, tile_d)
         # upper storey
         w2 = half - 5.8 * s
-        tp.rect(cx - w2, top1 - 0.05, cx + w2, top1 + 0.7 * s, hexc("#8f2118"))
+        tp.rect(cx - w2, top1 - 0.05, cx + w2, top1 + 0.7 * s, pal("hall.red.dark"))
         _brackets(tp, cx - w2, cx + w2, top1 + 0.7 * s, 0.8 * s, unit=0.6 * s)
         y_u0 = top1 + 1.5 * s
-        tp.rect(cx - w2 - 0.8 * s, y_u0 - 0.05, cx + w2 + 0.8 * s, y_u0 + 0.25 * s, hexc("#241a14"))
+        tp.rect(cx - w2 - 0.8 * s, y_u0 - 0.05, cx + w2 + 0.8 * s, y_u0 + 0.25 * s, pal("eave.under"))
         y_u0 += 0.25 * s
     else:
         y_u0 = y_r0
@@ -239,7 +240,7 @@ def _hall(tp, cx, base_y, width, bays, name=None, font_path=None, levels=2, scal
         tp.line(pts, shade(tile, 1.08), 0.12 * s)
         for j in range(5):
             px, py = pts[-2 - j * 2]
-            tp.ellipse(px, py + 0.28 * s, 0.14 * s, 0.2 * s, hexc("#5a4a2a"))
+            tp.ellipse(px, py + 0.28 * s, 0.14 * s, 0.2 * s, pal("ornament.dark"))
     # main ridge and chiwen ornaments
     tp.rect(rx0 - 0.2 * s, ridge_y, rx1 + 0.2 * s, ridge_y + 0.75 * s, shade(tile_d, 1.05))
     tp.rect(rx0 - 0.2 * s, ridge_y + 0.5 * s, rx1 + 0.2 * s, ridge_y + 0.62 * s, shade(tile, 1.1))
@@ -251,25 +252,25 @@ def _hall(tp, cx, base_y, width, bays, name=None, font_path=None, levels=2, scal
         tp.poly(catmull(body, n=6), shade(tile_d, 1.05))
         tp.line(catmull([(rx + sgn * 0.3 * s, ridge_y + 0.4 * s), (rx + sgn * 0.5 * s, ridge_y + 1.4 * s),
                          (rx, ridge_y + 2.1 * s)], closed=False), shade(tile, 1.1), 0.1 * s)
-        tp.ellipse(rx - sgn * 0.05 * s, ridge_y + 1.2 * s, 0.12 * s, 0.12 * s, hexc("#3a2a1f"))
+        tp.ellipse(rx - sgn * 0.05 * s, ridge_y + 1.2 * s, 0.12 * s, 0.12 * s, pal("ornament.dark"))
     # plaque
     if name:
         pw, ph = 2.5 * s, 4.1 * s
         py0 = y_r0 + 1.3 * s
-        tp.rect(cx - pw / 2, py0, cx + pw / 2, py0 + ph, hexc("#c4972f"))
-        tp.rect(cx - pw / 2 + 0.28 * s, py0 + 0.28 * s, cx + pw / 2 - 0.28 * s, py0 + ph - 0.28 * s, hexc("#1a2d55"))
+        tp.rect(cx - pw / 2, py0, cx + pw / 2, py0 + ph, pal("plaque.frame"))
+        tp.rect(cx - pw / 2 + 0.28 * s, py0 + 0.28 * s, cx + pw / 2 - 0.28 * s, py0 + ph - 0.28 * s, pal("plaque.ground"))
         for j in range(12):
             tp.ellipse(cx - pw / 2 + 0.14 * s, py0 + 0.3 * s + j * (ph - 0.6 * s) / 11, 0.07 * s, 0.07 * s,
-                       hexc("#8f6a1c"))
+                       pal("plaque.stud"))
             tp.ellipse(cx + pw / 2 - 0.14 * s, py0 + 0.3 * s + j * (ph - 0.6 * s) / 11, 0.07 * s, 0.07 * s,
-                       hexc("#8f6a1c"))
+                       pal("plaque.stud"))
         if font_path:
             fs = int(0.95 * s * tp.ppm)
             font = ImageFont.truetype(font_path, fs)
             for j, ch in enumerate(name):
                 cy = py0 + ph - 0.55 * s - (j + 0.5) * (ph - 1.1 * s) / len(name)
                 x, y = tp.P(cx, cy)
-                tp.d.text((x, y), ch, font=font, fill=hexc("#e9c46a"), anchor="mm")
+                tp.d.text((x, y), ch, font=font, fill=pal("plaque.text"), anchor="mm")
 
 
 @lru_cache(maxsize=4)
@@ -285,12 +286,12 @@ def gate_texture(ppm=40):
     img = Image.new("RGBA", (int(GATE_W * ppm), int(GATE_H * ppm)), (0, 0, 0, 0))
     tp = _TexPen(img, ppm)
     wall_h = 10.0
-    tp.rect(0, 0, GATE_W, wall_h, hexc("#9a2a1f"))
-    tp.rect(0, 0, GATE_W, 0.8, hexc("#7a766c"))
-    tp.rect(0, wall_h - 0.5, GATE_W, wall_h, hexc("#d8d2c5"))
+    tp.rect(0, 0, GATE_W, wall_h, pal("gate.wall"))
+    tp.rect(0, 0, GATE_W, 0.8, pal("gate.base"))
+    tp.rect(0, wall_h - 0.5, GATE_W, wall_h, pal("gate.coping"))
     for cx, w in ((GATE_W / 2, 5.0), (GATE_W / 2 - 12, 3.8), (GATE_W / 2 + 12, 3.8)):
-        tp.rect(cx - w / 2, 0.8, cx + w / 2, 5.2, hexc("#1d0f0b"))
-        tp.ellipse(cx, 5.2, w / 2, w / 2, hexc("#1d0f0b"))
+        tp.rect(cx - w / 2, 0.8, cx + w / 2, 5.2, pal("gate.void"))
+        tp.ellipse(cx, 5.2, w / 2, w / 2, pal("gate.void"))
     _hall(tp, GATE_W / 2, wall_h, 40.0, 9, levels=2, scale=0.85)
     return img
 
@@ -300,23 +301,23 @@ def corridor_texture(length=100.0, ppm=30):
     h = 9.0
     img = Image.new("RGBA", (int(length * ppm), int(h * ppm)), (0, 0, 0, 0))
     tp = _TexPen(img, ppm)
-    tp.rect(0, 0, length, 0.7, hexc("#b5afa2"))
-    tp.rect(0, 0.7, length, 6.0, hexc("#9a2a1f"))
+    tp.rect(0, 0, length, 0.7, pal("corridor.base"))
+    tp.rect(0, 0.7, length, 6.0, pal("gate.wall"))
     x = 2.0
     while x < length:
-        tp.rect(x - 0.25, 0.7, x + 0.25, 6.0, hexc("#7c1d15"))
-        tp.rect(x + 1.0, 2.6, x + 3.0, 4.8, hexc("#4a2317"))
+        tp.rect(x - 0.25, 0.7, x + 0.25, 6.0, pal("corridor.col"))
+        tp.rect(x + 1.0, 2.6, x + 3.0, 4.8, pal("corridor.window"))
         for k in range(6):
-            tp.line([(x + 1.0 + k * 0.4, 2.6), (x + 1.0 + k * 0.4, 4.8)], hexc("#b88a3a"), 0.05)
+            tp.line([(x + 1.0 + k * 0.4, 2.6), (x + 1.0 + k * 0.4, 4.8)], pal("corridor.lattice"), 0.05)
         x += 4.0
-    tp.rect(0, 6.0, length, 6.6, hexc("#26507a"))
-    tp.rect(0, 6.6, length, 6.9, hexc("#241a14"))
-    tp.rect(0, 6.9, length, 8.6, hexc("#d9a02a"))
+    tp.rect(0, 6.0, length, 6.6, pal("lintel.blue"))
+    tp.rect(0, 6.6, length, 6.9, pal("eave.under"))
+    tp.rect(0, 6.9, length, 8.6, pal("corridor.roof"))
     x = 0.0
     while x < length:
-        tp.line([(x, 6.9), (x, 8.6)], hexc("#a87414"), 0.06)
+        tp.line([(x, 6.9), (x, 8.6)], pal("corridor.roof.line"), 0.06)
         x += 0.35
-    tp.rect(0, 8.5, length, 9.0, hexc("#b87d18"))
+    tp.rect(0, 8.5, length, 9.0, pal("corridor.roof.edge"))
     return img
 
 
@@ -324,26 +325,27 @@ def corridor_texture(length=100.0, ppm=30):
 def terrace_texture(width=COURT_X - STAIR_X, ppm=60):
     img = Image.new("RGBA", (int(width * ppm), int(H * ppm)), (0, 0, 0, 0))
     tp = _TexPen(img, ppm)
-    tp.rect(0, 0, width, H, hexc("#dcd6ca"))
-    bands = [(0.0, 0.35, "#bdb7aa"), (0.35, 0.8, "#e8e3d8"), (1.5, 1.9, "#e8e3d8"), (1.9, 3.6, "#cfc9bc"),
-             (3.6, 4.0, "#e8e3d8"), (4.7, 5.1, "#e8e3d8"), (5.1, H, "#efebe2")]
+    tp.rect(0, 0, width, H, pal("terrace"))
+    bands = [(0.0, 0.35, "terrace.dark"), (0.35, 0.8, "terrace.band"), (1.5, 1.9, "terrace.band"),
+             (1.9, 3.6, "terrace.panel"), (3.6, 4.0, "terrace.band"), (4.7, 5.1, "terrace.band"),
+             (5.1, H, "hall.base.light")]
     for y0, y1, c in bands:
-        tp.rect(0, y0, width, y1, hexc(c))
+        tp.rect(0, y0, width, y1, pal(c))
     for y0 in (0.8, 4.0):  # lotus petal rows
         x = 0.1
         while x < width:
-            tp.ellipse(x + 0.2, y0 + 0.35, 0.2, 0.35, hexc("#e2ddd1"), outline=hexc("#aaa396"), w=0.03)
+            tp.ellipse(x + 0.2, y0 + 0.35, 0.2, 0.35, pal("marble.1"), outline=pal("marble.3"), w=0.03)
             x += 0.42
     x = 0.8
     while x < width:  # carved panels on the recessed waist
-        tp.rect(x, 2.1, x + 2.2, 3.4, hexc("#c4bdb0"))
-        tp.rect(x + 0.1, 2.2, x + 2.1, 3.3, hexc("#d6d0c3"))
+        tp.rect(x, 2.1, x + 2.2, 3.4, pal("marble.2"))
+        tp.rect(x + 0.1, 2.2, x + 2.1, 3.3, pal("marble.1.5"))
         x += 3.0
     x = 1.3
     while x < width:  # drain spouts
-        tp.rect(x - 0.18, 4.9, x + 0.18, 5.25, hexc("#b7b0a3"))
-        tp.ellipse(x, 4.95, 0.2, 0.17, hexc("#a39c8f"))
-        tp.ellipse(x, 4.92, 0.06, 0.05, hexc("#3e3a34"))
+        tp.rect(x - 0.18, 4.9, x + 0.18, 5.25, pal("spout"))
+        tp.ellipse(x, 4.95, 0.2, 0.17, pal("spout"))
+        tp.ellipse(x, 4.92, 0.06, 0.05, pal("spout.hole"))
         x += 2.6
     arr = np.asarray(img).astype(float)
     arr[..., :3] *= noise_texture(img.size, scale=0.5, seed=3, amp=0.06)[..., None]
@@ -354,18 +356,18 @@ def terrace_texture(width=COURT_X - STAIR_X, ppm=60):
 def ramp_texture(ppm=160):
     w_m = RAMP_X * 2
     l_m = math.hypot(L, H)
-    img = Image.new("RGBA", (int(w_m * ppm), int(l_m * ppm)), hexc("#cfc9bc"))
+    img = Image.new("RGBA", (int(w_m * ppm), int(l_m * ppm)), pal("terrace.panel"))
     tp = _TexPen(img, ppm)
     rng = np.random.default_rng(7)
-    hi, lo = hexc("#f1eee6"), hexc("#8a8376")
+    hi, lo = pal("marble.0"), pal("marble.4.5")
 
     def relief(pts, w):
         tp.line([(x - 0.03, y + 0.03) for x, y in pts], hi, w)
         tp.line([(x + 0.03, y - 0.03) for x, y in pts], lo, w)
-        tp.line(pts, hexc("#d8d2c4"), w * 0.75)
+        tp.line(pts, pal("marble.1.5"), w * 0.75)
 
-    tp.rect(0, 0, w_m, l_m, hexc("#bdb6a8"))
-    tp.rect(0.12, 0.12, w_m - 0.12, l_m - 0.12, hexc("#cdc7b9"))
+    tp.rect(0, 0, w_m, l_m, pal("marble.2.5"))
+    tp.rect(0.12, 0.12, w_m - 0.12, l_m - 0.12, pal("marble.2"))
     # sea waves at the bottom, mountains, then clouds with dragons
     for k in range(8):
         y = 0.3 + k * 0.1
@@ -381,10 +383,10 @@ def ramp_texture(ppm=160):
             x, y = dense[i]
             tp.ellipse(x, y, 0.05, 0.05, lo)
         hx, hy = body[-1]
-        tp.ellipse(hx, hy, 0.3, 0.24, hexc("#cfc8ba"), outline=lo, w=0.04)
+        tp.ellipse(hx, hy, 0.3, 0.24, pal("marble.1.5"), outline=lo, w=0.04)
         relief([(hx - 0.25, hy + 0.15), (hx - 0.5, hy + 0.5)], 0.05)
         relief([(hx + 0.25, hy + 0.15), (hx + 0.5, hy + 0.5)], 0.05)
-        tp.ellipse(1.7, dragon_y + 2.3, 0.18, 0.18, hexc("#e8e3d8"), outline=lo, w=0.04)
+        tp.ellipse(1.7, dragon_y + 2.3, 0.18, 0.18, pal("terrace.band"), outline=lo, w=0.04)
     for _ in range(26):
         cx, cy = rng.uniform(0.4, w_m - 0.4), rng.uniform(2.2, l_m - 0.8)
         r = rng.uniform(0.12, 0.25)
@@ -400,7 +402,7 @@ def ramp_texture(ppm=160):
 def burner_sprite(scale):
     from .paint import Pen
     p = Pen(scale * 2, 1.8, 2.4, foot_m=0.05)
-    bronze, dark = hexc("#4f5a3e"), hexc("#2f3526")
+    bronze, dark = pal("bronze"), pal("bronze.dark")
     for x in (-0.45, 0.0, 0.45):
         p.poly([(x - 0.07, 0.0), (x + 0.07, 0.0), (x + 0.09, 0.6), (x - 0.09, 0.6)], dark)
     p.smooth([(-0.62, 1.25), (-0.66, 0.9), (-0.45, 0.55), (0, 0.48), (0.45, 0.55), (0.66, 0.9), (0.62, 1.25)],
@@ -411,9 +413,9 @@ def burner_sprite(scale):
                 (s * 0.38, 1.52)], dark)
     p.smooth([(-0.4, 1.3), (-0.35, 1.5), (0, 1.6), (0.35, 1.5), (0.4, 1.3)], shade(bronze, 0.9))
     p.ellipse(0, 1.68, 0.08, 0.08, bronze)
-    p.line([(-0.4, 0.95), (0.4, 0.95)], hexc("#8a9468"), 0.03)
+    p.line([(-0.4, 0.95), (0.4, 0.95)], pal("bronze.light"), 0.03)
     for k in range(-3, 4):
-        p.ellipse(k * 0.15, 0.8, 0.04, 0.04, hexc("#8a9468"))
+        p.ellipse(k * 0.15, 0.8, 0.04, 0.04, pal("bronze.light"))
     img = p.img.resize((p.w // 2, p.h // 2), Image.LANCZOS)
     return img, (p.ox / 2, p.oy / 2)
 
@@ -666,10 +668,10 @@ def draw_ground(cam, img, draw):
     far = []
     # grout base
     for pts, col, n in (
-        ([(-COURT_X, 0, COURT_Z0), (COURT_X, 0, COURT_Z0), (COURT_X, 0, 0), (-COURT_X, 0, 0)], hexc("#7d776b"),
+        ([(-COURT_X, 0, COURT_Z0), (COURT_X, 0, COURT_Z0), (COURT_X, 0, 0), (-COURT_X, 0, 0)], pal("pave.grout"),
          (0, 1, 0)),
         ([(-COURT_X, H, L), (COURT_X, H, L), (COURT_X, H, L + TERRACE_D), (-COURT_X, H, L + TERRACE_D)],
-         hexc("#8e887b"), (0, 1, 0)),
+         pal("pave.grout"), (0, 1, 0)),
     ):
         if cam.facing(np.mean(pts, axis=0), n):
             q = cam.project_poly(np.array(pts, float))
@@ -703,13 +705,12 @@ def draw_ground(cam, img, draw):
     slabs(-COURT_X, -2.4, COURT_Z0, 0, 0.0, 1.6, 0.8, PAVE)
     slabs(2.4, COURT_X, COURT_Z0, 0, 0.0, 1.6, 0.8, PAVE)
     slabs(-2.4, 2.4, COURT_Z0, 0, 0.0, 2.4, 1.2, PAVE_PATH, stagger=False)
-    slabs(-COURT_X, COURT_X, L + 0.2, L + TERRACE_D, H, 1.2, 1.2, hexc("#b9b3a5"))
+    slabs(-COURT_X, COURT_X, L + 0.2, L + TERRACE_D, H, 1.2, 1.2, pal("pave.terrace"))
     for d, q, col in sorted(far, key=lambda t: -t[0]):
         draw.polygon(q, fill=col)
 
 
-SKY_STOPS = [(-30, (226, 196, 150)), (0, (250, 226, 186)), (3, (246, 219, 178)), (9, (214, 212, 204)),
-             (18, (160, 186, 208)), (32, (106, 146, 190)), (55, (62, 104, 160)), (90, (38, 74, 132))]
+SKY_STOPS = sky_stops()
 
 
 def sky_image(cam, size):
@@ -726,7 +727,7 @@ def sky_image(cam, size):
     sx, sy = -0.1 * w, hy - 0.35 * h
     r = np.sqrt((gx - sx) ** 2 + (gy - sy) ** 2) / (0.9 * w)
     glow = np.exp(-r * r * 2.2)[..., None]
-    arr = arr * (1 - 0.4 * glow) + np.array([255, 226, 170]) * 0.4 * glow
+    arr = arr * (1 - 0.4 * glow) + np.array(rgb("glow")) * 0.4 * glow
     return Image.fromarray(arr.clip(0, 255).astype(np.uint8), "RGB"), hy
 
 
@@ -747,4 +748,4 @@ def render_static(cam_params, size, ss=2):
 
 
 def soft_shadow(rx, ry):
-    return soft_blob(rx, ry, (20, 15, 10, 110), max(2, rx * 0.25))
+    return soft_blob(rx, ry, pal("shadow", 110), max(2, rx * 0.25))
