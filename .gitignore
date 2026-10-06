@@ -5,3 +5,7 @@ build/
 build_log.txt
 __pycache__/
 *.pyc
+
+# grading
+grade/node_modules/
+output/graded/

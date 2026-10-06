@@ -85,3 +85,26 @@ python make_video.py screenplays/danchi_wendui.json --preview 100,330,660
 6. **结尾大全景（6s）**：大臣跪下叩首谢恩，镜头缓缓拉远，夕阳下的宫殿。
 
 台词和配音可以沿用本仓库的剧本和 TTS 输出（`build/audio.wav`），再用平台的对口型功能或剪映合成。
+
+## 调色（Chroma.js）
+
+`grade/make_lut.mjs` 用 [Chroma.js](https://gka.github.io/chroma.js/) 在 OKLab/OKLCH 感知色彩空间里计算调色，导出 3D LUT（`.cube`）。具体做法：
+- 对明度做 S 曲线；
+- 按色相调整饱和度：红色和金色加浓，天蓝收一点；
+- 按亮度做暗部、亮部的分离色调；
+- 纯黑（遮幅黑边）保持不变。
+
+LUT 通用，ffmpeg、达芬奇、剪映都能直接加载。
+
+| 风格 | 说明 |
+| --- | --- |
+| `dusk` 暮金 | 暗部压暖褐，高光鎏金，宫墙和琉璃瓦更浓 |
+| `teal_orange` 青橙 | 电影常见的青橙对比，暗部偏青，亮部偏橙 |
+| `xuanzhi` 宣纸 | 降饱和、黑位抬成墨色、高光米黄，像旧画卷 |
+
+![调色对比](docs/grades.jpg)
+
+```bash
+cd grade && npm install && npm run luts          # 生成 luts/*.cube
+ffmpeg -i output/danchi_wendui.mp4 -vf lut3d=grade/luts/dusk.cube -c:a copy output/graded/dusk.mp4
+```
