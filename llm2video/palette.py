@@ -5,15 +5,17 @@ as `Swatch` tuples that remember their family and position on that family's ramp
 moves along the same ramp instead of scaling RGB, which keeps every shade inside the palette.
 """
 import json
+import os
 from functools import lru_cache
 from pathlib import Path
 
-PATH = Path(__file__).with_name("palette.json")
+PATH = Path(os.environ.get("LLM2VIDEO_PALETTE", Path(__file__).with_name("palette.json")))
 DATA = json.loads(PATH.read_text(encoding="utf-8"))
 ROLES = DATA["roles"]
 FAMILIES = DATA["families"]
 N_FINE = len(next(iter(FAMILIES.values()))["fine"])
 N_STEPS = len(DATA["ladder"])
+MIX_SPACE = DATA.get("mix", "oklab")  # space used for runtime blends: "oklab" or CIE "lab"
 
 
 def _hex(s):
@@ -53,6 +55,42 @@ def from_oklab(lab):
     g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s
     bb = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
     return tuple(int(round(_gam(v))) for v in (r, g, bb))
+
+
+# CIE Lab (D65), for palettes generated with --space=lab / lch
+_WHITE = (0.95047, 1.0, 1.08883)
+
+
+def _f(t):
+    return t ** (1 / 3) if t > 216 / 24389 else (24389 / 27 * t + 16) / 116
+
+
+def _finv(t):
+    return t ** 3 if t ** 3 > 216 / 24389 else (116 * t - 16) / (24389 / 27)
+
+
+@lru_cache(maxsize=65536)
+def to_lab(rgb):
+    r, g, b = (_lin(float(v)) for v in rgb[:3])
+    x = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / _WHITE[0]
+    y = (0.2126729 * r + 0.7151522 * g + 0.0721750 * b) / _WHITE[1]
+    z = (0.0193339 * r + 0.1191920 * g + 0.9503041 * b) / _WHITE[2]
+    fx, fy, fz = _f(x), _f(y), _f(z)
+    # scaled to 0..1 lightness so callers can treat it like OKLab
+    return ((116 * fy - 16) / 100, 5 * (fx - fy), 2 * (fy - fz))
+
+
+def from_lab(lab):
+    L, a, b = lab[0] * 100, lab[1] * 100, lab[2] * 100
+    fy = (L + 16) / 116
+    x, y, z = _finv(fy + a / 500) * _WHITE[0], _finv(fy) * _WHITE[1], _finv(fy - b / 200) * _WHITE[2]
+    r = 3.2404542 * x - 1.5371385 * y - 0.4985314 * z
+    g = -0.9692660 * x + 1.8760108 * y + 0.0415560 * z
+    bb = 0.0556434 * x - 0.2040259 * y + 1.0572252 * z
+    return tuple(int(round(_gam(v))) for v in (r, g, bb))
+
+
+_TO, _FROM = (to_lab, from_lab) if MIX_SPACE == "lab" else (to_oklab, from_oklab)
 
 
 # ----------------------------------------------------------------------------- swatches
@@ -109,20 +147,22 @@ def shade(c, k):
                 hi = mid
         i = lo if lo == 0 or abs(Ls[lo] - target) < abs(Ls[lo - 1] - target) else lo - 1
         return Swatch(_fine(fam)[0][i] + alpha, fam, i)
-    # off-palette colour: scale OKLab lightness and lean toward the mood light/shadow
-    tint = to_oklab(_hex(DATA["mood"]["light" if k > 1 else "shadow"]))
+    # off-palette colour: scale lightness in the palette space and lean toward the mood light/shadow
+    lab = _TO(tuple(c[:3]))
+    target = lab[0] * k ** 0.7
+    tint = _TO(_hex(DATA["mood"]["light" if k > 1 else "shadow"]))
     w = min(0.35, abs(1 - k) * 0.6)
     L = target
     a = lab[1] + (tint[1] - lab[1]) * w
     b = lab[2] + (tint[2] - lab[2]) * w
-    return Swatch(from_oklab((L, a, b)) + alpha)
+    return Swatch(_FROM((L, a, b)) + alpha)
 
 
 def mix(c1, c2, t):
-    """Perceptual blend in OKLab (keeps alpha of c1)."""
-    x, y = to_oklab(tuple(c1[:3])), to_oklab(tuple(c2[:3]))
+    """Perceptual blend in the palette's Lab space (keeps alpha of c1)."""
+    x, y = _TO(tuple(c1[:3])), _TO(tuple(c2[:3]))
     lab = tuple(p + (q - p) * t for p, q in zip(x, y))
-    return from_oklab(lab) + tuple(c1[3:4])
+    return _FROM(lab) + tuple(c1[3:4])
 
 
 def sky_stops():

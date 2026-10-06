@@ -6,7 +6,8 @@
 // Semantic roles (robe, skin, roof tile ...) point at ramp steps; required contrast pairs are
 // checked and a failing role is walked along its ramp until it passes.
 //
-// Usage: node make_palette.mjs [out.json]   (default: ../llm2video/palette.json)
+// Usage: node make_palette.mjs [out.json] [--space=oklab|lab|oklch|lch]
+//        (default: ../llm2video/palette.json, oklab)
 import chroma from "chroma-js";
 import { writeFileSync } from "node:fs";
 
@@ -17,7 +18,10 @@ const MOOD = {
   shadow: "#2b2342",  // shadow colour: shadows lean here
   lightPull: 0.32,    // how far the lightest step leans toward `light`
   shadowPull: 0.42,   // how far the darkest step leans toward `shadow`
+  maxHueShift: 360,   // polar spaces only: cap on hue rotation in degrees (--maxhue=20)
 };
+const argMaxHue = process.argv.find((a) => a.startsWith("--maxhue="));
+if (argMaxHue) MOOD.maxHueShift = Number(argMaxHue.split("=")[1]);
 
 // 0 = lightest (like 50), 10 = darkest (like 950)
 const STEPS = 11;
@@ -108,25 +112,52 @@ const CHECKS = [
 const lightHue = chroma(MOOD.light);
 const shadowHue = chroma(MOOD.shadow);
 
+// how the mood is applied:
+//   oklab / lab   : blend toward the light/shadow colour in that Lab space (pulls chroma down)
+//   oklch / lch   : rotate hue toward the light/shadow hue in polar space, chroma kept by the taper
+const SPACE = (process.argv.find((a) => a.startsWith("--space=")) || "--space=oklab").split("=")[1];
+const CIE = SPACE === "lab" || SPACE === "lch";
+const POLAR = SPACE === "lch" || SPACE === "oklch";
+const LAB = CIE ? "lab" : "oklab";     // rectangular space used for blends at runtime
+const LS = CIE ? 100 : 1;              // lightness scale of the space
+const polar = (c) => (CIE ? c.lch() : c.oklch());
+const make = (L, C, H) => (CIE ? chroma.lch(L, C, H) : chroma.oklch(L, C, H));
+const ladder = (pos) => ladderL(pos) * LS;  // same ladder, expressed in the chosen space
+
+function rotateHue(h, target, w) {
+  const d = ((target - h + 540) % 360) - 180;
+  const shift = Math.max(-MOOD.maxHueShift, Math.min(MOOD.maxHueShift, d * w));
+  return (h + shift + 360) % 360;
+}
+
 function rampColor(base, pos) {
-  const [Lb, Cb, Hb] = base.oklch();
-  const L = ladderL(pos);
+  const [Lb, Cb, Hb] = polar(base);
+  const L = ladder(pos);
   const hb = Number.isNaN(Hb) ? 0 : Hb;
   // chroma peaks at the base lightness and tapers toward paper-white and ink-black
-  const d = (L - Lb) / 0.55;
+  const d = (L - Lb) / (0.55 * LS);
   let C = Cb * Math.max(0.18, 1 - 0.85 * d * d);
-  if (L > 0.9) C *= 1 - (L - 0.9) * 6;
-  let c = chroma.oklch(L, C, hb);
-  // mood: shift hue toward light colour above the base, toward shadow colour below it
-  if (L > Lb) c = chroma.mix(c, lightHue, MOOD.lightPull * ((L - Lb) / (L_TOP - Lb + 1e-6)) ** 1.3, "oklab");
-  else c = chroma.mix(c, shadowHue, MOOD.shadowPull * ((Lb - L) / (Lb - L_BOTTOM + 1e-6)) ** 1.2, "oklab");
+  if (L > 0.9 * LS) C *= 1 - (L / LS - 0.9) * 6;
+  const top = L_TOP * LS, bottom = L_BOTTOM * LS;
+  const wl = MOOD.lightPull * ((L - Lb) / (top - Lb + 1e-6)) ** 1.3;
+  const ws = MOOD.shadowPull * ((Lb - L) / (Lb - bottom + 1e-6)) ** 1.2;
+  let H2, C2;
+  if (POLAR) {
+    // perceptual hue rotation: the colour turns toward the mood hue but keeps its saturation
+    const [, , hl] = polar(lightHue), [, , hs] = polar(shadowHue);
+    H2 = L > Lb ? rotateHue(hb, hl, wl) : rotateHue(hb, hs, ws);
+    C2 = C;
+  } else {
+    let c = make(L, C, hb);
+    c = L > Lb ? chroma.mix(c, lightHue, wl, LAB) : chroma.mix(c, shadowHue, ws, LAB);
+    [, C2, H2] = polar(c);
+    if (Number.isNaN(H2)) H2 = hb;
+  }
   // keep the ladder lightness exact, then pull chroma in until the colour fits sRGB
-  let [, C2, H2] = c.oklch();
-  if (Number.isNaN(H2)) H2 = hb;
-  let out = chroma.oklch(L, C2, H2);
+  let out = make(L, C2, H2);
   for (let i = 0; i < 60 && out.clipped(); i++) {
     C2 *= 0.95;
-    out = chroma.oklch(L, C2, H2);
+    out = make(L, C2, H2);
   }
   return out;
 }
@@ -176,19 +207,19 @@ for (const [fg, bg, min, why] of CHECKS) {
 
 // sky by elevation angle: warm haze at the horizon through cream into a dusk blue
 const skyScale = chroma
-  .scale([chroma.mix(MOOD.light, families.gold.steps[1], 0.4, "oklab"), families.gold.steps[0],
+  .scale([chroma.mix(MOOD.light, families.gold.steps[1], 0.4, LAB), families.gold.steps[0],
           families.marble.steps[0], families.lapis.steps[2], families.lapis.steps[4], families.lapis.steps[6]])
-  .domain([0, 4, 11, 24, 50, 90]).mode("oklab");
+  .domain([0, 4, 11, 24, 50, 90]).mode(POLAR ? SPACE : LAB);
 const skyStops = [-30, 0, 3, 9, 18, 32, 55, 90].map((e) => [e, skyScale(Math.max(0, e)).hex()]);
-const below = chroma.mix(skyScale(0), families.pave.steps[3], 0.35, "oklab");
+const below = chroma.mix(skyScale(0), families.pave.steps[3], 0.35, LAB);
 skyStops[0][1] = below.hex();
 
 const special = {
-  haze: chroma.mix(skyScale(2), families.marble.steps[1], 0.45, "oklab").hex(),
-  glow: chroma.mix(MOOD.light, "#ffffff", 0.2, "oklab").hex(),
+  haze: chroma.mix(skyScale(2), families.marble.steps[1], 0.45, LAB).hex(),
+  glow: chroma.mix(MOOD.light, "#ffffff", 0.2, LAB).hex(),
   rays: MOOD.light,
   shadow: MOOD.shadow,
-  cloud: chroma.mix(families.marble.steps[0], MOOD.light, 0.25, "oklab").hex(),
+  cloud: chroma.mix(families.marble.steps[0], MOOD.light, 0.25, LAB).hex(),
 };
 
 // ----------------------------------------------------------------------------- write
@@ -196,6 +227,8 @@ const special = {
 const hex = (c) => c.hex();
 const out = {
   mood: MOOD,
+  space: SPACE,
+  mix: LAB,
   ladder: Array.from({ length: STEPS }, (_, k) => +ladderL(k / (STEPS - 1)).toFixed(3)),
   families: Object.fromEntries(Object.entries(families).map(([n, f]) => [n, {
     label: f.label, note: f.note, base: f.base, baseStep: f.baseStep,
@@ -206,10 +239,10 @@ const out = {
   special,
   audit,
 };
-const dst = process.argv[2] || new URL("../llm2video/palette.json", import.meta.url).pathname;
+const dst = process.argv.slice(2).find((a) => !a.startsWith("--")) || new URL("../llm2video/palette.json", import.meta.url).pathname;
 writeFileSync(dst, JSON.stringify(out, null, 1) + "\n");
 
-console.log(`${MOOD.name}  ->  ${dst}`);
+console.log(`${MOOD.name} [${SPACE}${POLAR && MOOD.maxHueShift < 360 ? " ≤" + MOOD.maxHueShift + "°" : ""}]  ->  ${dst}`);
 for (const [n, f] of Object.entries(families)) console.log(n.padEnd(10), f.steps.map(hex).join(" "));
 console.log("\ncontrast audit");
 for (const a of audit) {

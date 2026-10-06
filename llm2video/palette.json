@@ -5,8 +5,11 @@
   "light": "#ffd8a0",
   "shadow": "#2b2342",
   "lightPull": 0.32,
-  "shadowPull": 0.42
+  "shadowPull": 0.42,
+  "maxHueShift": 360
  },
+ "space": "oklab",
+ "mix": "oklab",
  "ladder": [
   0.965,
   0.888,
